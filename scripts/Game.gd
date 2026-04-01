@@ -70,16 +70,14 @@ func _reset_level(l:int) -> void:
             # Slope down from right to left, barrels roll left naturally
             ground_segments.append({"from": Vector2(960, 400), "to": Vector2(0, 520)})
         2:
-            # Multiple slopes with platforms
-            ground_segments.append({"from": Vector2(0, 520), "to": Vector2(540, 520)})
-            ground_segments.append({"from": Vector2(540, 520), "to": Vector2(900, 420)})
-            ground_segments.append({"from": Vector2(900, 420), "to": Vector2(960, 400)})
+            # Sloped ground from right to left for barrels to roll left across screen
+            ground_segments.append({"from": Vector2(960, 400), "to": Vector2(0, 520)})
             fixed_platforms.append({"pos": Vector2(340, 420), "size": Vector2(160, 20)})
             fixed_platforms.append({"pos": Vector2(620, 360), "size": Vector2(170, 20)})
         3:
-            # Slopes with moving platforms
+            # Slopes with moving platforms, slope from right to left for barrels
             ground_segments.append({"from": Vector2(0, 520), "to": Vector2(500, 520)})
-            ground_segments.append({"from": Vector2(500, 520), "to": Vector2(880, 420)})
+            ground_segments.append({"from": Vector2(880, 420), "to": Vector2(500, 520)})
             ground_segments.append({"from": Vector2(880, 420), "to": Vector2(960, 400)})
             moving_platforms.append({"pos": Vector2(320, 380), "size": Vector2(140, 16), "dir": Vector2(0, 1), "range": Vector2(340, 460), "speed": 100.0})
             moving_platforms.append({"pos": Vector2(620, 300), "size": Vector2(170, 16), "dir": Vector2(1, 0), "range": Vector2(520, 760), "speed": 130.0})
@@ -119,8 +117,20 @@ func _process_player(delta: float) -> void:
     if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
         input_x += 1.0
 
-    # Direct movement from input (no lerp smoothing for kinematic-only)
-    player.pos.x += input_x * MOVE_SPEED * delta
+    # Movement along ground direction when on ground
+    if player.on_ground:
+        var floor = _floor_info_at_x(player.pos.x)
+        if floor and abs(floor.angle) > 0.01:
+            # On sloped ground, move along slope
+            var slope_dir = Vector2(cos(floor.angle), sin(floor.angle)).normalized()
+            var move_dir = slope_dir if cos(floor.angle) > 0 else -slope_dir
+            player.pos += move_dir * input_x * MOVE_SPEED * delta
+        else:
+            # On flat ground or platform, move horizontally
+            player.pos.x += input_x * MOVE_SPEED * delta
+    else:
+        # In air, move horizontally
+        player.pos.x += input_x * MOVE_SPEED * delta
 
     # Jump logic: only jump when on ground
     if Input.is_key_pressed(KEY_SPACE) and player.on_ground:
@@ -195,6 +205,19 @@ func _process_barrels(delta: float) -> void:
                 barrel.vel += slope_dir * gravity_component
                 # Reduced friction damping for easier rolling
                 barrel.vel *= 0.994
+
+        # Platform collision for barrels
+        for platform in fixed_platforms + moving_platforms:
+            var platform_top = platform.pos.y
+            var barrel_bottom = barrel.pos.y + BARREL_RADIUS
+            var barrel_left = barrel.pos.x - BARREL_RADIUS
+            var barrel_right = barrel.pos.x + BARREL_RADIUS
+            if barrel_right > platform.pos.x and barrel_left < platform.pos.x + platform.size.x and barrel_bottom >= platform_top and barrel.pos.y < platform_top and barrel.vel.y >= 0:
+                barrel.pos.y = platform_top - BARREL_RADIUS
+                barrel.vel.y = 0
+                # Apply friction for rolling on platform
+                barrel.vel *= 0.995
+                break  # Only collide with one platform
 
         if barrel.pos.y > 780 or barrel.pos.x < -40 or barrel.pos.x > 1000:
             barrel.dead = true
@@ -301,7 +324,4 @@ func _input(event):
         elif event.keycode == KEY_N:
             _reset_level(min(3, level + 1))
         elif event.keycode == KEY_ESCAPE:
-            get_tree().change_scene_to_file("res://scenes/Menu.tscn")
-
-        elif event.scancode == KEY_ESCAPE:
             get_tree().change_scene_to_file("res://scenes/Menu.tscn")
