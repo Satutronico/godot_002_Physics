@@ -27,12 +27,34 @@ func _ready() -> void:
     start.add_theme_font_size_override("font_size", 24)
     start.modulate = Color(0.84, 0.95, 0.98)
     add_child(start)
+
+    var algo = Label.new()
+    algo.text = "Press A for Algo1 (Basic), B for Algo2 (Defensive), C for Algo3 (Predictive)"
+    algo.position = Vector2(150, 340)
+    algo.add_theme_font_size_override("font_size", 16)
+    algo.modulate = Color(0.9, 0.8, 0.6)
+    add_child(algo)
     print("[Menu._ready] Menu UI complete")
 
 func _input(event: InputEvent) -> void:
     if event is InputEventKey and event.pressed:
         if event.keycode == KEY_ENTER or event.keycode == KEY_SPACE or Input.is_action_pressed("ui_accept"):
             print("[Menu._input] Starting game...")
+            get_tree().change_scene_to_file("res://scenes/Game.tscn")
+        elif event.keycode == KEY_A:
+            print("[Menu._input] Starting algo1...")
+            SaveData.algo_mode = true
+            SaveData.algo_type = 1
+            get_tree().change_scene_to_file("res://scenes/Game.tscn")
+        elif event.keycode == KEY_B:
+            print("[Menu._input] Starting algo2...")
+            SaveData.algo_mode = true
+            SaveData.algo_type = 2
+            get_tree().change_scene_to_file("res://scenes/Game.tscn")
+        elif event.keycode == KEY_C:
+            print("[Menu._input] Starting algo3...")
+            SaveData.algo_mode = true
+            SaveData.algo_type = 3
             get_tree().change_scene_to_file("res://scenes/Game.tscn")
         elif event.keycode == KEY_ESCAPE:
             get_tree().quit()

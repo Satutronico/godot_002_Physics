@@ -12,8 +12,8 @@ var level := 1
 var time_alive := 0.0
 var spawn_timer := 0.0
 var barrels := []
-var game_over := false
-var win := false
+var total_levels_completed := 0
+var total_time := 0.0
 
 var player := {
     "pos": Vector2(120, 420),
@@ -24,6 +24,9 @@ var player := {
 var ground_segments := []
 var fixed_platforms := []
 var moving_platforms := []
+
+var game_over := false
+var win := false
 
 var hud: Label
 
@@ -36,6 +39,52 @@ func _ready() -> void:
     print("[Game._ready] Level reset, player pos=", player.pos)
     queue_redraw()
     print("[Game._ready] END")
+
+func _save_algo_play() -> void:
+    var algo_names = ["Basic", "Defensive", "Predictive"]
+    var algo_name = algo_names[SaveData.algo_type - 1]
+    var num = _get_next_algo_number()
+    var filename = "user://algoPlay%04d.txt" % num
+    var file = FileAccess.open(filename, FileAccess.WRITE)
+    if file:
+        file.store_string("Algo: %s\n" % algo_name)
+        file.store_string("Levels Completed: %d\n" % total_levels_completed)
+        file.store_string("Total Time: %.2f\n" % total_time)
+        file.store_string("Outcome: %s\n" % ("Completed All" if total_levels_completed == 3 else "Failed at Level %d" % (total_levels_completed + 1)))
+        file.close()
+        print("[Game._save_algo_play] Saved to ", filename)
+    
+    # Append to report
+    var report_file = "user://algoPlayerReport.md"
+    var report = FileAccess.open(report_file, FileAccess.READ_WRITE)
+    if not report:
+        report = FileAccess.open(report_file, FileAccess.WRITE)
+        report.store_string("# Algo Player Report\n\n")
+        report.store_string("| Algo | Levels Completed | Total Time | Outcome |\n")
+        report.store_string("|------|------------------|------------|---------|\n")
+    else:
+        report.seek_end()
+    report.store_string("| %s | %d | %.2f | %s |\n" % [algo_name, total_levels_completed, total_time, "Completed All" if total_levels_completed == 3 else "Failed at Level %d" % (total_levels_completed + 1)])
+    report.close()
+    
+    # Return to menu
+    get_tree().change_scene_to_file("res://scenes/Menu.tscn")
+    
+    SaveData.algo_mode = false  # Reset after saving
+
+func _get_next_algo_number() -> int:
+    var dir = DirAccess.open("user://")
+    if dir:
+        var files = dir.get_files()
+        var max_num = 0
+        for f in files:
+            if f.begins_with("algoPlay") and f.ends_with(".txt"):
+                var num_str = f.substr(8, 4)
+                var num = num_str.to_int()
+                if num > max_num:
+                    max_num = num
+        return max_num + 1
+    return 1
 
 func _build_hud() -> void:
     hud = Label.new()
@@ -51,6 +100,9 @@ func _build_hud() -> void:
 
 func _reset_level(l:int) -> void:
     level = clamp(l, 1, 3)
+    if level == 1:
+        total_levels_completed = 0
+        total_time = 0.0
     time_alive = 0.0
     spawn_timer = 0.0
     barrels.clear()
@@ -100,10 +152,21 @@ func _process(delta: float) -> void:
 
     if time_alive >= LEVEL_LIVING_TIME[level-1]:
         win = true
+        if SaveData.algo_mode:
+            total_time += time_alive
+            total_levels_completed += 1
+            if level < 3:
+                _reset_level(level + 1)
+                win = false
+            # else end
         SaveData.best_level = max(SaveData.best_level, level)
 
     if !game_over and !win:
         SaveData.best_score = max(SaveData.best_score, int(time_alive))
+
+    # Save algo play data if in algo mode and game ended
+    if SaveData.algo_mode and (game_over or win):
+        _save_algo_play()
 
     _update_hud()
     if int(time_alive * 10) % 10 == 0:
@@ -112,10 +175,49 @@ func _process(delta: float) -> void:
 
 func _process_player(delta: float) -> void:
     var input_x = 0.0
-    if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
-        input_x -= 1.0
-    if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
-        input_x += 1.0
+    if SaveData.algo_mode:
+        # Algorithmic control
+        match SaveData.algo_type:
+            1:  # Basic: move right, but left if threat ahead
+                var threat_ahead = false
+                for barrel in barrels:
+                    if barrel.pos.x > player.pos.x and barrel.pos.x < player.pos.x + 100 and abs(barrel.pos.y - player.pos.y) < 100:
+                        threat_ahead = true
+                        break
+                input_x = -1.0 if threat_ahead else 1.0
+                if threat_ahead and player.on_ground:
+                    player.vel.y = JUMP_SPEED
+                    player.on_ground = false
+            2:  # Defensive: move right, dodge close barrels
+                input_x = 1.0
+                var close_barrel = false
+                for barrel in barrels:
+                    if barrel.pos.x > player.pos.x and barrel.pos.x < player.pos.x + 50 and abs(barrel.pos.y - player.pos.y) < 100:
+                        close_barrel = true
+                        break
+                if close_barrel and player.on_ground:
+                    player.vel.y = JUMP_SPEED
+                    player.on_ground = false
+                    input_x = -1.0  # Move left briefly
+            3:  # Predictive: move right or left based on prediction
+                var threat_ahead = false
+                for barrel in barrels:
+                    var denom = barrel.vel.x - input_x * MOVE_SPEED
+                    if abs(denom) > 1.0:
+                        var time_to_hit = (barrel.pos.x - player.pos.x) / denom
+                        if time_to_hit > 0 and time_to_hit < 1.0 and abs((barrel.pos.y + barrel.vel.y * time_to_hit) - player.pos.y) < 100:
+                            threat_ahead = true
+                            break
+                input_x = -1.0 if threat_ahead else 1.0
+                if threat_ahead and player.on_ground:
+                    player.vel.y = JUMP_SPEED
+                    player.on_ground = false
+    else:
+        # Human control
+        if Input.is_key_pressed(KEY_A) or Input.is_key_pressed(KEY_LEFT):
+            input_x -= 1.0
+        if Input.is_key_pressed(KEY_D) or Input.is_key_pressed(KEY_RIGHT):
+            input_x += 1.0
 
     # Movement along ground direction when on ground
     if player.on_ground:
@@ -132,10 +234,11 @@ func _process_player(delta: float) -> void:
         # In air, move horizontally
         player.pos.x += input_x * MOVE_SPEED * delta
 
-    # Jump logic: only jump when on ground
-    if Input.is_key_pressed(KEY_SPACE) and player.on_ground:
-        player.vel.y = JUMP_SPEED
-        player.on_ground = false
+    # Jump logic: only jump when on ground (for human, already handled in input)
+    if not SaveData.algo_mode:
+        if Input.is_key_pressed(KEY_SPACE) and player.on_ground:
+            player.vel.y = JUMP_SPEED
+            player.on_ground = false
 
     # Apply gravity only for jump/fall (not on ground)
     if not player.on_ground:
@@ -173,6 +276,11 @@ func _apply_ground_collision() -> void:
     elif player.pos.x > 940:
         player.pos.x = 940
         player.vel.x = 0
+
+    if player.on_ground:
+        var current_floor = _floor_info_at_x(player.pos.x)
+        if current_floor:
+            player.pos.y = current_floor.y - 26
 
     if player.pos.y > 700:
         game_over = true
