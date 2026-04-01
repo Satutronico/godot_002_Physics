@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128">
+  <rect width="128" height="128" fill="#162A3D"/>
+  <circle cx="64" cy="64" r="45" fill="#33A6DD"/>
+  <path d="M32 96 L96 96 L80 40 L48 40 Z" fill="#fff" opacity="0.9"/>
+  <text x="64" y="76" font-size="20" fill="#162A3D" text-anchor="middle" font-family="Verdana">PHY</text>
+</svg>

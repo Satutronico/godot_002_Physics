@@ -1,0 +1,16 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+
+        {
+            "name": "Godot: Run Game",
+            "type": "cppvsdbg",
+            "request": "launch",
+            "program": "C:\\Godot4\\Godot_v4.6.1-stable_win64_console.exe",
+            "args": ["--path", "${workspaceFolder}"],
+            "cwd": "${workspaceFolder}",
+            "console": "integratedTerminal",
+            "stopAtEntry": false
+        }
+    ]
+}

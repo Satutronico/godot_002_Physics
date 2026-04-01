@@ -1,0 +1,11 @@
+{
+    "terminal.integrated.env.windows": {
+        "PATH": "C:\\Godot4;${env:PATH}",
+        "GODOT": "C:\\Godot4\\Godot_v4.6.1-stable_win64_console.exe",
+        "GODOT_GUI": "C:\\Godot4\\Godot_v4.6.1-stable_win64.exe"
+    },
+    "files.exclude": {
+        "**/.godot": true,
+        "**/export": true
+    }
+}
